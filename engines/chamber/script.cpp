@@ -1544,6 +1544,22 @@ uint16 SCR_42_LoadZone(void) {
 	}
 	beforeChangeZone(index);
 	changeZone(index);
+
+	/* Guard against a "phantom" character surviving a room swap. Going through a
+	   door must end any interaction in progress: changeZone() clears the per-actor
+	   command queues (next_aspirant/vorts/turkey, wvar_0E), but an Aspirant trade
+	   chain can still be in flight via runCommand()'s ScriptRerun loop, and
+	   kScrPool8_CurrentPers keeps pointing at the previous room's actor. Aborting
+	   the command chain and dropping the stale actor here stops a queued command
+	   (e.g. an Aspirant trade) from executing in a zone that has no matching spawn
+	   spot. prepareVorts/Turkey/Aspirant below re-populate CurrentPers if a real
+	   actor is present in the new room.
+	   NB: kept here (the door path) rather than in changeZone(), because
+	   SCR_25_ChangeZoneOnly performs scripted in-place swaps that must keep the
+	   chain and CurrentPers intact. */
+	the_command = 0;
+	script_vars[kScrPool8_CurrentPers] = pers_list;
+
 	script_byte_vars.zone_area_copy = script_byte_vars.zone_area;
 	script_byte_vars.cur_spot_idx = findInitialSpot();
 	skip_zone_transition |= script_byte_vars.cur_spot_idx;
@@ -4441,8 +4457,12 @@ uint16 RunScript(byte *code) {
 #endif
 
 #ifdef DEBUG_QUEST
-		if (script_ptr - templ_data == 0x4F) {
+		if (script_ptr - templ_data == 0x5B) {
 			/*manipulate rand_value to get a quest item we need*/
+			/*0x5B is the EGA (kultega.bin) offset of the quest-selection branch
+			  'if rand_value < 0x40'; the old 0x4F was mid-instruction so it never
+			  fired. Forcing rand_value here picks the quest: 0x00=Rope/De Profundis,
+			  0x40=Knife/The Wall, 0x80=Goblet/Twins, 0xC0=Fly/Scorpion's.*/
 			script_byte_vars.rand_value = DEBUG_QUEST;
 		}
 #endif
