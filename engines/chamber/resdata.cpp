@@ -27,6 +27,7 @@
 #include "chamber/resdata.h"
 #include "chamber/decompr.h"
 #include "chamber/ega.h"
+#include "chamber/amiga.h"
 
 namespace Chamber {
 
@@ -155,6 +156,11 @@ Load resident data files. Original game has all these data files embedded in the
 NB! Static data includes the font file, don't use any text print routines before it's loaded.
 */
 int16 loadStaticData() {
+	// The Amiga build stores the static resources uncompressed inside the KULT
+	// executable rather than in a compressed PXI module.
+	if (g_vm->_videoMode == Common::kRenderAmiga)
+		return loadAmigaStaticData();
+
 	Common::File pxi;
 
 	if (g_vm->_videoMode == Common::kRenderEGA)
@@ -261,16 +267,31 @@ ResEntry_t res_texts[] = {
 	{"$", NULL}
 };
 
+// The Amiga disk ships the per-language text files (VERB/MOTS/DESC/DIAL with a
+// D/E/F suffix) instead of the generic ...I.BIN names the DOS install uses.
+// For now bring up the English (E) set; full EU language selection (DRAP.BIN)
+// comes later.
+ResEntry_t res_texts_amiga[] = {
+	{"VERBE.BIN", vepci_data},
+	{"MOTSE.BIN", motsi_data},
+	{"$", NULL}
+};
+
 /*
 Load strings data (commands/names)
 */
 int16 loadVepciData() {
+	if (g_vm->_videoMode == Common::kRenderAmiga)
+		return loadFilesList(res_texts_amiga);
 	return loadFilesList(res_texts);
 }
 
 Graphics::Surface *loadFond(void) {
 	if (g_vm->_videoMode == Common::kRenderEGA)
 		return ega_loadFond("FOND.EGA");
+	// Amiga FOND.BIN is the same 4-plane planar 32000-byte format as EGA.
+	if (g_vm->_videoMode == Common::kRenderAmiga)
+		return ega_loadFond("FOND.BIN");
 	return loadSplash("FOND.BIN");
 }
 
@@ -302,10 +323,17 @@ ResEntry_t res_desci[] = {
 	{"$", NULL}
 };
 
+ResEntry_t res_desci_amiga[] = {
+	{"DESCE.BIN", desci_data},
+	{"$", NULL}
+};
+
 /*
 Load strings data (obj. descriptions)
 */
 int16 loadDesciData(void) {
+	if (g_vm->_videoMode == Common::kRenderAmiga)
+		return loadFilesList(res_desci_amiga);
 	while (!loadFilesList(res_desci))
 		askDisk2();
 	return 1;
@@ -316,10 +344,17 @@ ResEntry_t res_diali[] = {
 	{"$", NULL}
 };
 
+ResEntry_t res_diali_amiga[] = {
+	{"DIALE.BIN", diali_data},
+	{"$", NULL}
+};
+
 /*
 Load strings data (dialogs)
 */
 int16 loadDialiData(void) {
+	if (g_vm->_videoMode == Common::kRenderAmiga)
+		return loadFilesList(res_diali_amiga);
 	while (!loadFilesList(res_diali))
 		askDisk2();
 	return 1;
