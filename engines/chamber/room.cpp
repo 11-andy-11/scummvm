@@ -27,6 +27,7 @@
 #include "chamber/cga.h"
 #include "chamber/ega.h"
 #include "chamber/ega_resource.h"
+#include "chamber/amiga.h"
 #include "chamber/print.h"
 #include "chamber/anim.h"
 #include "chamber/cursor.h"
@@ -158,12 +159,21 @@ static const byte cga_color_sels[] = {
 };
 
 void selectSpecificPalette(byte index) {
-	g_vm->_renderer->colorSelect(cga_color_sels[index]);
+	// Amiga composes its room palette straight from the zone's palette_index
+	// (see amigaApplyRoomPalette in amiga.cpp); CGA/EGA use the two-entry CGA
+	// colour-select mapping.
+	if (g_vm->_videoMode == Common::kRenderAmiga)
+		amigaApplyRoomPalette(index);
+	else
+		g_vm->_renderer->colorSelect(cga_color_sels[index]);
 }
 
 
 void selectPalette(void) {
-	g_vm->_renderer->colorSelect(cga_color_sels[script_byte_vars.palette_index]);
+	if (g_vm->_videoMode == Common::kRenderAmiga)
+		amigaApplyRoomPalette(script_byte_vars.palette_index);
+	else
+		g_vm->_renderer->colorSelect(cga_color_sels[script_byte_vars.palette_index]);
 }
 
 /*
@@ -392,6 +402,12 @@ void loadZone(void) {
 	next_turkey_cmd = 0;
 	next_vorts_cmd = 0;
 	script_byte_vars.used_commands = 0;
+
+	// On Amiga, apply the zone palette as soon as the zone loads, so intro/
+	// special screens (which may not go through refreshZone()) aren't left on
+	// the previous (title) palette.
+	if (g_vm->_videoMode == Common::kRenderAmiga)
+		selectPalette();
 }
 
 void resetZone(void) {
