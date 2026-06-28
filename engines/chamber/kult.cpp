@@ -460,6 +460,36 @@ Common::Error ChamberEngine::init() {
 			exitGame();
 		/* fond wraps ega_backbuffer via init() — surface does not own pixel data, safe to delete directly */
 		delete fond;
+	} else if (g_vm->_videoMode == Common::kRenderAmiga) {
+		/* Amiga: the sprite banks use the same record layout as EGA but with a
+		   big-endian size and swapped w/h bytes (appendFromFileAmiga). The pixel
+		   data is word-planar (4 pixels per big-endian word, one nibble per
+		   bitplane); see appendFromStreamAmiga for the exact decode.
+		   The Amiga merges the DOS multi-file banks: PUZZL.BIN holds the DOS
+		   PUZZL.EGA + PUZZ1.EGA records, and the person bank (DOS PERSO.EGA) is
+		   split across A.BIN (records 0-60) + B.BIN (records 61-107); their
+		   record dimensions match DOS PERSO.EGA in order. */
+		ega_sprit_res = new EgaSpriteResource();
+		ega_sprit_res->appendFromFileAmiga("SPRIT.BIN");
+
+		ega_puzzl_res = new EgaSpriteResource();
+		ega_puzzl_res->appendFromFileAmiga("PUZZL.BIN");
+
+		ega_perso_res = new EgaSpriteResource();
+		ega_perso_res->appendFromFileAmiga("A.BIN");
+		ega_perso_res->appendFromFileAmiga("B.BIN");
+
+		Graphics::Surface *fond = loadFond();
+		if (!fond)
+			exitGame();
+		delete fond;
+
+		// The character-presentation intro (and other early scripted screens)
+		// set no palette of their own on Amiga; they relied on the gameplay
+		// palette persisting. Without it they inherit the title's fade-ramp end
+		// (KULT @122836 index 30), which renders the wallpaper bright pink. Apply
+		// the room palette now so the intro shows the correct muted colours.
+		amigaApplyRoomPalette(0);
 	} else {
 		while (!loadFond() || !loadSpritesData() || !loadPersData())
 			askDisk2();

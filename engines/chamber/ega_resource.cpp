@@ -46,11 +46,96 @@ EgaSpriteResource::~EgaSpriteResource() {
 	}
 }
 
+Graphics::Surface *EgaSpriteResource::getSprite(uint index) const {
+	if (index < _sprites.size())
+		return _sprites[index];
+
+	// Shared 1×1 placeholder for missing sprites (keeps blits in-bounds).
+	static Graphics::Surface *dummy = nullptr;
+	if (!dummy) {
+		dummy = new Graphics::Surface();
+		dummy->create(1, 1, Graphics::PixelFormat::createFormatCLUT8());
+	}
+	return dummy;
+}
+
 void EgaSpriteResource::appendFromFile(const char *filename) {
 	Common::File fd;
 	if (!fd.open(filename))
 		error("EgaSpriteResource::appendFromFile: cannot open %s", filename);
 	appendFromStream(fd);
+}
+
+void EgaSpriteResource::appendFromFileAmiga(const char *filename) {
+	Common::File fd;
+	if (!fd.open(filename))
+		error("EgaSpriteResource::appendFromFileAmiga: cannot open %s", filename);
+	appendFromStreamAmiga(fd);
+}
+
+void EgaSpriteResource::appendFromStreamAmiga(Common::SeekableReadStream &stream) {
+	// The Amiga sprite banks share the EGA record layout, but the 68000 build
+	// stores the record size as a big-endian word and swaps the width/height
+	// byte pair (it is the high/low half of a big-endian word).
+	//
+	// The pixel data is word-planar (this matches how the KULT executable's
+	// sprite-prepare routine reads it - hunk0+7426: it reads one big-endian
+	// 16-bit word per 4-pixel column and shifts its four nibbles into the four
+	// destination bitplanes). Each 16-bit big-endian word encodes 4 horizontal
+	// pixels: nibble[0] (bits 15..12) is bitplane 0, nibble[1] is bitplane 1,
+	// nibble[2] is bitplane 2, nibble[3] is bitplane 3; within each nibble the
+	// MSB (bit 3) is the leftmost pixel. Row stride is therefore w*2 bytes
+	// (w big-endian words per row), with no padding.
+	stream.skip(4); // skip 4-byte junk header
+
+	while (!stream.eos()) {
+		uint16 size = stream.readUint16BE();
+		if (stream.eos())
+			break;
+
+		byte h = stream.readByte(); // height in pixels
+		byte w = stream.readByte(); // width in 4-pixel units → actual pixel width = w * 4
+
+		if (size < 4)
+			break;
+
+		uint16 dataSize = size - 4; // bytes of word-planar pixel data
+
+		byte *data = new byte[dataSize];
+		uint16 read = stream.read(data, dataSize);
+
+		Graphics::Surface *sprite = new Graphics::Surface();
+		sprite->create(w * 4, h, Graphics::PixelFormat::createFormatCLUT8());
+
+		byte *pixels = (byte *)sprite->getPixels();
+
+		const uint16 rowBytes = w * 2; // w big-endian words per row
+		for (byte y = 0; y < h; y++) {
+			byte *dst = pixels + (uint)y * (w * 4);
+			for (byte c = 0; c < w; c++) {
+				uint off = (uint)y * rowBytes + c * 2;
+				uint16 word = (off + 1 < read) ? ((data[off] << 8) | data[off + 1]) : 0;
+				byte plane[4];
+				plane[0] = (word >> 12) & 0x0F;
+				plane[1] = (word >> 8) & 0x0F;
+				plane[2] = (word >> 4) & 0x0F;
+				plane[3] = word & 0x0F;
+				for (byte j = 0; j < 4; j++) {
+					byte bit = 3 - j; // MSB of each nibble is the leftmost pixel
+					byte ci = 0;
+					// nibble p is bitplane p (matches the FOND/title decode and the
+					// KULT staging->screen blit, which both use plane p -> bit p).
+					for (byte p = 0; p < 4; p++)
+						ci |= ((plane[p] >> bit) & 1) << p;
+					*dst++ = ci;
+				}
+			}
+		}
+
+		delete[] data;
+
+		_sprites.push_back(sprite);
+	}
 }
 
 void EgaSpriteResource::appendFromStream(Common::SeekableReadStream &stream) {

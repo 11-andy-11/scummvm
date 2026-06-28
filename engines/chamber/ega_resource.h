@@ -53,7 +53,15 @@ public:
 	void appendFromFile(const char *filename);
 	void appendFromStream(Common::SeekableReadStream &stream);
 
-	Graphics::Surface *getSprite(uint index) const { return _sprites[index]; }
+	// Amiga variant: big-endian record size, swapped width/height bytes; same
+	// 4-bpp chunky pixel encoding as the EGA banks.
+	void appendFromFileAmiga(const char *filename);
+	void appendFromStreamAmiga(Common::SeekableReadStream &stream);
+
+	// Returns a shared 1×1 placeholder when the bank has no such sprite, so
+	// callers never dereference past the array (e.g. the Amiga path, whose
+	// sprite banks are not decoded yet).
+	Graphics::Surface *getSprite(uint index) const;
 	uint getSpriteCount() const { return _sprites.size(); }
 
 private:
