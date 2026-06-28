@@ -108,6 +108,15 @@ void init(void);
 
 extern ChamberEngine *g_vm;
 
+// The Amiga port uses the same planar 16-colour graphics format as EGA, so all
+// the EGA rendering paths (sprites, fond, portraits, transitions, …) apply to
+// it unchanged; only the palette, the static-data loader and a few filenames
+// differ. Graphics code should branch on this helper rather than == kRenderEGA.
+inline bool isEgaLikeRenderer() {
+	return g_vm->_videoMode == Common::kRenderEGA ||
+	       g_vm->_videoMode == Common::kRenderAmiga;
+}
+
 } // End of namespace Chamber
 
 #endif

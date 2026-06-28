@@ -254,7 +254,11 @@ Common::Error ChamberEngine::init() {
 
 	// Initialize graphics using following:
 	bool isCustomHerc = false;
-	if (_videoMode == Common::RenderMode::kRenderEGA) {
+	if (isEgaLikeRenderer()) {
+		// EGA and Amiga both use the chunky 8bpp pipeline (1 byte/pixel,
+		// linear 320-byte lines, no CGA interlacing). The CGA values below
+		// would scramble the manual ofs += _screenBPL / ofs ^= _line_offset
+		// arithmetic used by the in-place animations (e.g. De Profundis).
 		_screenW = 320;
 		_screenH = 200;
 		_screenBits = 8;
