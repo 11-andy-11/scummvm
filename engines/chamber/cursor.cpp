@@ -27,6 +27,7 @@
 #include "chamber/resdata.h"
 #include "chamber/cga.h"
 #include "chamber/ega.h"
+#include "chamber/amiga.h"
 #include "chamber/renderer.h"
 #include "graphics/cursorman.h"
 #include "graphics/palette.h"
@@ -131,6 +132,69 @@ void EGARenderer::selectCursor(uint16 num) {
 	CursorMan.replaceCursor(cursorImage, CURSOR_WIDTH, CURSOR_HEIGHT, cursor_x_shift, cursor_y_shift, 255);
 	// TODO: Replace use of cursor palettes
 	CursorMan.replaceCursorPalette(Graphics::Palette::createEGAPalette().data(), 0, 16);
+	CursorMan.showMouse(true);
+}
+
+void AmigaRenderer::selectCursor(uint16 num) {
+	cursor_x_shift = cursor_shifts[num][0];
+	cursor_y_shift = cursor_shifts[num][1];
+
+	byte *dst = cursorImage;
+
+	/*Amiga SOURI.BIN stores each cursor as a 72-byte Amiga hardware sprite, NOT
+	  the 64-byte SOURI.EGA layout: a 4-byte control header (2 words SPRxPOS /
+	  SPRxCTL), then 16 lines of two big-endian 16-bit bitplane words (4 bytes per
+	  line = 64-byte body), then a 4-byte terminator. So the per-cursor stride is
+	  72 and the pixel data starts 4 bytes in (using the 64-byte stride drifts and
+	  selects the wrong glyph for higher cursor indices). Bitplanes:
+	    plane0 (bytes 0,1): outline mask (bit set = black pixel)
+	    plane1 (bytes 2,3): body mask    (bit set = white pixel)
+	  neither -> transparent; plane1 -> white; plane0 only -> black.*/
+	const int kAmigaCursorStride = 72;  // (2 + 16 + 2) words
+	const int kAmigaCursorHeader = 4;   // 2 control words before the bitplanes
+	cursor_shape = souri_data + num * kAmigaCursorStride + kAmigaCursorHeader;
+	byte *src = cursor_shape;
+	/*Sprite colour usage (verified by decoding SOURI.BIN): only two pixel classes
+	  ever appear - plane0-only pixels, which form the BULK/outer edges of every
+	  glyph, and plane0+plane1 pixels, which form the interior (plane1-only never
+	  occurs). The original draws the outer edges black and fills the interior with
+	  the colour, so plane0-only is the black outline and plane0+plane1 is the body.
+
+	  The in-room reticle (CURSOR_TARGET and the animated CURSOR_CROSSHAIR) has a
+	  white interior while navigating and a red interior over an interactive hotspot
+	  (cursor_color == 0xAA). The finger/hand and other pointers use the same black
+	  outline with a yellow (on a hotspot) or white body.*/
+	bool reticle = (num == CURSOR_TARGET || num == CURSOR_CROSSHAIR);
+	byte mainColor = 0;                                                      /*plane0 only: black edges*/
+	byte bodyColor = reticle ? ((cursor_color == 0xAA) ? 12 : 15)
+	                         : ((cursor_color == 0xAA) ? 14 : 15);           /*plane0+plane1: interior*/
+	for (int16 y = 0; y < CURSOR_HEIGHT; y++) {
+		uint16 plane0 = ((uint16)src[0] << 8) | (uint16)src[1];
+		uint16 plane1 = ((uint16)src[2] << 8) | (uint16)src[3];
+		src += 4;
+		for (int16 x = 0; x < CURSOR_WIDTH; x++) {
+			byte bit0 = (plane0 >> (CURSOR_WIDTH - 1 - x)) & 1;
+			byte bit1 = (plane1 >> (CURSOR_WIDTH - 1 - x)) & 1;
+			if (!bit0 && !bit1)
+				*dst++ = 255; /*transparent*/
+			else if (bit1)
+				*dst++ = bodyColor;
+			else
+				*dst++ = mainColor;
+		}
+	}
+
+	CursorMan.replaceCursor(cursorImage, CURSOR_WIDTH, CURSOR_HEIGHT, cursor_x_shift, cursor_y_shift, 255);
+	/*Give the cursor a fixed palette so it stays visible regardless of the current
+	  room palette: index 0 = black outline, 12 = red (crosshair/passage body, 0xe14
+	  sampled from the footage), 14 = yellow (hotspot body), 15 = white (body).*/
+	static const byte cursorPal[16 * 3] = {
+		0, 0, 0,        0, 0, 0,  0, 0, 0,  0, 0, 0,
+		0, 0, 0,        0, 0, 0,  0, 0, 0,  0, 0, 0,
+		0, 0, 0,        0, 0, 0,  0, 0, 0,  0, 0, 0,
+		238, 17, 68,    0, 0, 0,  255, 255, 0, 255, 255, 255
+	};
+	CursorMan.replaceCursorPalette(cursorPal, 0, 16);
 	CursorMan.showMouse(true);
 }
 

@@ -30,6 +30,7 @@
 #include "chamber/decompr.h"
 #include "chamber/cga.h"
 #include "chamber/ega.h"
+#include "chamber/amiga.h"
 #include "chamber/ega_resource.h"
 #include "chamber/anim.h"
 #include "chamber/cursor.h"
@@ -303,7 +304,21 @@ Common::Error ChamberEngine::init() {
 
 	Graphics::Surface *splash = nullptr;
 
-	if (_videoMode == Common::RenderMode::kRenderEGA) {
+	if (_videoMode == Common::kRenderAmiga) {
+		/* Amiga title screen. The static resources (including the palette
+		   table) live inside KULT, so load them up front to make the title
+		   palette available, then show the planar PRES.BIN. */
+		loadAmigaStaticData();
+		splash = ega_loadFond("PRES.BIN");
+		if (!splash) {
+			_shouldQuit = true;
+			return Common::kNoError;
+		}
+		// The title's palette table (KULT @122836) is a 31-step fade-in ramp;
+		// index 30 is the full-brightness end, i.e. the final title colours.
+		g_vm->_renderer->colorSelect(AMIGA_NUM_PALETTES - 1);
+		g_vm->_renderer->backBufferToRealFull();
+	} else if (_videoMode == Common::RenderMode::kRenderEGA) {
 		/* EGA title screen */
 		splash = ega_loadFond("PRESEGA.EGA");
 		if (!splash) {
@@ -358,7 +373,10 @@ Common::Error ChamberEngine::init() {
 	}
 
 	if (splash) {
-		if (g_vm->_videoMode != Common::RenderMode::kRenderEGA)
+		/* EGA and Amiga splashes wrap ega_backbuffer (no owned pixel data), so
+		   only CGA/Herc splashes (from loadSplash) must free their pixels. */
+		if (g_vm->_videoMode != Common::RenderMode::kRenderEGA &&
+		    g_vm->_videoMode != Common::kRenderAmiga)
 			splash->free();
 		delete splash;
 	}
