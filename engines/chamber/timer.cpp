@@ -32,8 +32,11 @@ namespace Chamber {
 
 
 void animateGauss(byte *target) {
-	if (g_vm->_videoMode == Common::kRenderEGA)
-		return; /*gauss area is pre-rendered in FOND.EGA*/
+	if (isEgaLikeRenderer())
+		return; /*gauss area is pre-rendered in FOND.EGA / FOND.BIN; and on
+		          Amiga this runs on the timer thread, so blitting to the screen
+		          here would race the main render thread (SDL_BlitSurface aborts
+		          if the screen surface is locked by the other thread).*/
 	byte *sprite;
 	byte phase = getRand() % 4;
 	if (phase == script_byte_vars.gauss_phase)

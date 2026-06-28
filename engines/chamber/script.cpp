@@ -4495,6 +4495,20 @@ uint16 RunScript(byte *code) {
 #endif
 
 
+		// The Amiga script blob (TEMPL.BIN, sliced from the 68000 KULT executable)
+		// pads instructions to word boundaries with 0x00 / 0xAA filler bytes; the
+		// real terminator is 0xFF (as on DOS). These pads appear mid-script - e.g.
+		// in the Twins, between the bronze serpent's OPEN/SHUT playSound and the
+		// jaw-redraw call - so treating them as end-of-script (which the generic
+		// check below does, since 0x00 looks like a null opcode and 0xAA is out of
+		// range) aborts the script early and the jaws never get redrawn. Skip them
+		// and continue. DOS EGA/CGA never emit these bytes.
+		if (g_vm->_videoMode == Common::kRenderAmiga
+		        && (opcode == 0x00 || opcode == 0xAA)) {
+			script_ptr++;
+			continue;
+		}
+
 		if (opcode == 0 || opcode >= MAX_SCR_HANDLERS)
 			break;
 
